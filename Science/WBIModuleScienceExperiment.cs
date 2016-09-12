@@ -42,9 +42,6 @@ namespace WildBlueIndustries
         public string overrideExperimentID = string.Empty;
 
         [KSPField]
-        public string requiredParts = string.Empty;
-
-        [KSPField]
         public int minCrew;
 
         [KSPField]
@@ -86,6 +83,9 @@ namespace WildBlueIndustries
         [KSPField]
         public float chanceOfSuccess;
 
+        [KSPField]
+        public float minimumAsteroidMass;
+
         [KSPField(isPersistant = true)]
         public string status = string.Empty;
 
@@ -113,9 +113,12 @@ namespace WildBlueIndustries
         public Dictionary<string, SExperimentResource> resourceMap = null;
         public string[] resourceMapKeys;
 
+        protected string[] requiredParts = null;
         protected int currentPartCount;
         protected bool hasRequiredParts;
         protected ConfigNode nodeCompletionHandler = null;
+        protected string partsList = string.Empty;
+        protected bool resultsSafetyCheck;
 
         public override void OnLoad(ConfigNode node)
         {
@@ -141,8 +144,6 @@ namespace WildBlueIndustries
             //Required resources
             rebuildResourceMap();
         }
-
-        protected bool resultsSafetyCheck;
 
         public override void OnUpdate()
         {
@@ -185,9 +186,16 @@ namespace WildBlueIndustries
             //Max Altitude
             if (maxAltitude > 0.001f)
                 requirements.Append(string.Format("<b>Max altitude: </b>{0:f2}m\r\n", maxAltitude));
+            //Asteroid Mass
+            if (minimumAsteroidMass > 0.001f)
+                requirements.Append(string.Format("<b>Asteroid Mass: </b>{0:f2}m\r\n", minimumAsteroidMass));
             //Required parts
-            if (string.IsNullOrEmpty(requiredParts) == false)
-                requirements.Append("<b>Parts: </b>" + requiredParts + "\r\n");
+            if (string.IsNullOrEmpty(partsList) == false)
+            {
+                requirements.Append("<b>Parts (needs one): </b>\r\n");
+                for (int index = 0; index < requiredParts.Length; index++)
+                    requirements.Append(requiredParts[index] + "\r\n");
+            }
             //Required resources
             if (string.IsNullOrEmpty(requiredResources) == false)
             {
@@ -309,8 +317,39 @@ namespace WildBlueIndustries
                 }
             }
 
+            //Asteroid Mass
+            if (minimumAsteroidMass > 0.001f)
+            {
+                List<ModuleAsteroid> asteroidList = this.part.vessel.FindPartModulesImplementing<ModuleAsteroid>();
+                ModuleAsteroid[] asteroids = asteroidList.ToArray();
+                ModuleAsteroid asteroid;
+                float largestAsteroidMass = 0f;
+
+                //No asteroids? That's a problem!
+                if (asteroidList.Count == 0)
+                {
+                    status = string.Format("Needs Asteroid of {0:f2}mt", minimumAsteroidMass);
+                    return false;
+                }
+
+                //Find the most massive asteroid
+                for (index = 0; index < asteroids.Length; index++)
+                {
+                    asteroid = asteroids[index];
+                    if (asteroid.part.mass > largestAsteroidMass)
+                        largestAsteroidMass = asteroid.part.mass;
+                }
+
+                //Make sure we have an asteroid of sufficient mass.
+                if (largestAsteroidMass < minimumAsteroidMass)
+                {
+                    status = string.Format("Needs Asteroid of {0:f2}mt", minimumAsteroidMass);
+                    return false;
+                }
+            }
+
             //Required parts
-            if (string.IsNullOrEmpty(requiredParts) == false)
+            if (string.IsNullOrEmpty(partsList) == false)
             {
                 int partCount = this.part.vessel.Parts.Count;
                 if (currentPartCount != partCount)
@@ -321,23 +360,21 @@ namespace WildBlueIndustries
                     for (index = 0; index < totalCount; index++)
                     {
                         testPart = this.part.vessel.parts[index];
-                        if (requiredParts.Contains(testPart.partInfo.title))
+                        if (partsList.Contains(testPart.partInfo.title))
                         {
                             hasRequiredParts = true;
                             break;
                         }
                     }
-
-                    if (hasRequiredParts == false)
-                    {
-                        status = "Needs " + requiredParts;
-                        return false;
-                    }
                 }
 
-                else if (hasRequiredParts == false)
+                if (hasRequiredParts == false)
                 {
-                    status = "Needs " + requiredParts;
+                    StringBuilder requirements = new StringBuilder();
+                    requirements.Append("Needs one: ");
+                    for (index = 0; index < requiredParts.Length; index++)
+                        requirements.Append(requiredParts[index] + "\r\n");
+                    status = requirements.ToString();
                     return false;
                 }
             }
@@ -381,6 +418,8 @@ namespace WildBlueIndustries
                 status = "Completed";
             runCompletionHandler(resultRoll);
             sendResultsMessage();
+            if (Deployed == false)
+                DeployExperiment();
             return true;
         }
 
@@ -539,11 +578,14 @@ namespace WildBlueIndustries
             //Do a quick check for completion
             CheckCompletion();
 
-            //If this is the last transfer we can do then show experiment results
+            //If the experiment is completed then be sure to transfer its ScienceData.
             if (isCompleted)
             {
                 finalTransfer = true;
-                DeployExperiment();
+                ScienceData[] scienceData = sourceExperiment.GetData();
+                for (int index = 0; index < scienceData.Length; index++)
+                    ReturnData(scienceData[index]);
+                sourceExperiment.ResetExperiment();
             }
         }
 
@@ -618,8 +660,16 @@ namespace WildBlueIndustries
                 title = nodeDefinition.GetValue("title");
 
             //requiredParts
-            if (nodeDefinition.HasValue("requiredParts"))
-                requiredParts = nodeDefinition.GetValue("requiredParts");
+            if (nodeDefinition.HasValue("requiredPart"))
+            {
+                requiredParts = nodeDefinition.GetValues("requiredPart");
+                StringBuilder builder = new StringBuilder();
+                for (index = 0; index < requiredParts.Length; index++)
+                {
+                    builder.Append(requiredParts[index] + ";");
+                }
+                partsList = builder.ToString();
+            }
 
             //minCrew
             if (nodeDefinition.HasValue("minCrew"))

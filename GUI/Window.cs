@@ -77,6 +77,16 @@ namespace WildBlueIndustries
         public virtual void SetVisible(bool newValue)
         {
             this.visible = newValue;
+
+            /*
+            if (!newValue)
+            {
+                if (HighLogic.LoadedSceneIsFlight)
+                    InputLockManager.RemoveControlLock("WindowLock" + windowId);
+                else if (HighLogic.LoadedSceneIsEditor)
+                    EditorLogic.fetch.Unlock("WindowLock" + windowId);
+            }
+             */
         }
 
         public void ToggleVisible()
@@ -160,6 +170,7 @@ namespace WildBlueIndustries
                     windowPos = GUILayout.Window(windowId, windowPos, PreDrawWindowContents, WindowTitle, GUILayout.ExpandWidth(true),
                         GUILayout.ExpandHeight(true), GUILayout.MinWidth(64), GUILayout.MinHeight(64));
                 }
+
             }
         }
 
@@ -200,7 +211,78 @@ namespace WildBlueIndustries
                 HandleWindowEvents(resizeRect);
             }
 
+            preventClickthrough();
+
             GUI.DragWindow();
+        }
+
+        bool lockedUI;
+        private void preventClickthrough()
+        {
+            bool mouseInWindow = windowPos.Contains(Input.mousePosition);
+
+            /*
+            if (mouseInWindow && !mouseDown && (Event.current.type == EventType.mouseDown || Event.current.type == EventType.MouseDown))
+            {
+                Debug.Log("FRED eating mouse event");
+                Event.current.Use();
+                mouseDown = true;
+            }
+
+            else if (mouseInWindow)
+            {
+                mouseDown = false;
+            }
+             */
+
+            if (mouseInWindow && !lockedUI)
+            {
+                lockedUI = true;
+
+                /*
+                //Context menus
+                UIPartActionWindow[] actionWindows = (UIPartActionWindow[])GameObject.FindObjectsOfType<UIPartActionWindow>();
+                UIPartActionWindow actionWindow;
+                if (actionWindows != null)
+                {
+                    Debug.Log("FRED locking action windows");
+                    for (int index = 0; index < actionWindows.Length; index++)
+                    {
+                        Debug.Log("FRED locking action window " + index);
+                        actionWindow = actionWindows[index];
+                        if (actionWindow.Display == UIPartActionWindow.DisplayType.Selected)
+                        {
+                            Debug.Log("FRED disabling window");
+                            actionWindow.enabled = false;
+//                            MonoUtilities.RefreshContextWindows(this.part);
+                        }
+                    }
+                }
+                 */
+
+                //Hide tooltip
+                if (EditorTooltip.Instance != null)
+                    EditorTooltip.Instance.HideToolTip();
+
+                //Lock game controls
+                /*
+                if (HighLogic.LoadedSceneIsFlight)
+                    InputLockManager.SetControlLock(ControlTypes.All, "WindowLock" + windowId);
+                else if (HighLogic.LoadedSceneIsEditor)
+                    EditorLogic.fetch.Lock(true, true, true, "WindowLock" + windowId);
+                 */
+            }
+
+            else if (!mouseInWindow && lockedUI)
+            {
+                lockedUI = false;
+
+                //Unlock game controls
+                if (HighLogic.LoadedSceneIsFlight)
+                    InputLockManager.RemoveControlLock("WindowLock" + windowId);
+                else if (HighLogic.LoadedSceneIsEditor)
+                    EditorLogic.fetch.Unlock("WindowLock" + windowId);
+            }
         }
 
         protected abstract void DrawWindowContents(int windowId);

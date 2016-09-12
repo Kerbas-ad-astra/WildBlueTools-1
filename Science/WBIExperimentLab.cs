@@ -25,12 +25,42 @@ namespace WildBlueIndustries
         private static double DISTRIBUTION_TIMER = 1.0f;
 
         [KSPField]
+        public bool debugMode;
+
+        [KSPField]
+        public bool canCreateExperiments;
+
+        [KSPField]
+        public string experimentCreationSkill = string.Empty;
+
+        [KSPField]
+        public int minimumCreationLevel;
+
+        [KSPField]
         public string defaultExperiment = "WBIEmptyExperiment";
+
+        [KSPField]
+        public string opsButtonName = "Experiment Lab";
+
+        [KSPField]
+        public string creationTags = string.Empty;
+
+        [KSPField]
+        public string defaultCreationResource = string.Empty;
+
+        [KSPField]
+        public double minimumCreationAmount = 0f;
+
+        [KSPField]
+        public bool checkCreationResources;
 
         [KSPField(isPersistant = true)]
         public bool isGUIVisible = true;
 
         WBIModuleScienceExperiment[] experimentSlots = null;
+
+        public Dictionary<string, double> shareAmounts = new Dictionary<string, double>();
+        public Dictionary<string, double> currentAmounts = new Dictionary<string, double>();
 
         private WBIResourceSwitcher switcher = null;
         private ExpManifestAdminView manifestAdmin = new ExpManifestAdminView();
@@ -39,8 +69,11 @@ namespace WildBlueIndustries
         [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Show Manifest")]
         public void ShowManifestGUI()
         {
+            //Setup the experiment slots
             GetExperimentSlots();
             manifestAdmin.experimentSlots = this.experimentSlots;
+
+            //Show the admin view.
             manifestAdmin.SetVisible(true);
         }
 
@@ -88,7 +121,12 @@ namespace WildBlueIndustries
             GetExperimentSlots();
             switcher = this.part.FindModuleImplementing<WBIResourceSwitcher>();
             manifestAdmin.SetupView(this.part, !HighLogic.LoadedSceneIsEditor, !HighLogic.LoadedSceneIsEditor, this);
+            manifestAdmin.canCreateExperiments = this.canCreateExperiments;
+            manifestAdmin.minimumCreationLevel = this.minimumCreationLevel;
+            manifestAdmin.experimentCreationSkill = this.experimentCreationSkill;
+            manifestAdmin.creationTags = this.creationTags;
             SetupGUI(isGUIVisible);
+            setupExperimentResources();
         }
 
         public override void OnUpdate()
@@ -174,8 +212,19 @@ namespace WildBlueIndustries
                     {
                         //Calculate share amount
                         shareAmount = resource.amount / requiredResourceMap[resource.resourceName].Count;
-                        if (shareAmount < 0.001f)
+                        if (shareAmount < 0.0001f)
                             continue;
+
+                        //Debugging: track the share amount
+                        if (debugMode)
+                        {
+                            if (shareAmounts.ContainsKey(resource.resourceName) == false)
+                                shareAmounts.Add(resource.resourceName, 0);
+                            if (currentAmounts.ContainsKey(resource.resourceName) == false)
+                                currentAmounts.Add(resource.resourceName, 0);
+                            currentAmounts[resource.resourceName] = resource.amount;
+                            shareAmounts[resource.resourceName] = shareAmount;
+                        }
 
                         //Get the experiments
                         experiments = requiredResourceMap[resource.resourceName];
@@ -188,7 +237,7 @@ namespace WildBlueIndustries
 
                         //Resource has been divied up.
                         resource.amount = remainder;
-                        if (resource.amount < 0.001f)
+                        if (resource.amount < 0.0001f)
                             resource.amount = 0f;
                     }
                 }
@@ -239,6 +288,53 @@ namespace WildBlueIndustries
             return experimentSlots;
         }
 
+        protected void setupExperimentResources()
+        {
+            ConfigNode nodeResource = null;
+            PartResource resource = null;
+            string resourceName;
+            string[] mapKeys;
+            int index, experimentIndex;
+            int totalExperiments = experimentSlots.Length;
+            WBIModuleScienceExperiment experiment;
+            List<string> addedResources = new List<string>();
+
+            for (experimentIndex = 0; experimentIndex < totalExperiments; experimentIndex++)
+            {
+                experiment = experimentSlots[experimentIndex];
+                if (experiment.experimentID != experiment.defaultExperiment)
+                {
+                    mapKeys = experiment.resourceMap.Keys.ToArray<string>();
+                    for (index = 0; index < mapKeys.Length; index++)
+                    {
+                        resourceName = mapKeys[index];
+
+                        //Add the resource if needed
+                        if (this.part.Resources.Contains(resourceName) == false)
+                        {
+                            nodeResource = new ConfigNode("RESOURCE");
+                            nodeResource.AddValue("name", resourceName);
+                            nodeResource.AddValue("amount", "0");
+                            nodeResource.AddValue("maxAmount", experiment.resourceMap[resourceName].targetAmount.ToString());
+                            resource = this.part.Resources.Add(nodeResource);
+                            resource.isVisible = false;
+                            addedResources.Add(resourceName);
+                        }
+
+                        //Add to max amount to account for amount that the experiment needs
+                        else if (addedResources.Contains(resourceName))
+                        {
+                            this.part.Resources[resourceName].maxAmount += experiment.resourceMap[resourceName].targetAmount;
+                        }
+                    }
+                }
+            }
+
+            //Dirty the GUI
+            if (addedResources.Count > 0)
+                MonoUtilities.RefreshContextWindows(this.part);
+        }
+
         protected void OnExperimentReceived(WBIModuleScienceExperiment transferRecipient)
         {
             ConfigNode nodeResource = null;
@@ -277,9 +373,6 @@ namespace WildBlueIndustries
                 //Dirty the GUI
                 MonoUtilities.RefreshContextWindows(this.part);
             }
-
-            //Setup the IVA props
-
         }
 
         protected void OnExperimentTransfered(WBIModuleScienceExperiment transferedExperiment)
@@ -348,25 +441,13 @@ namespace WildBlueIndustries
                 manifestAdmin.experimentSlots = this.experimentSlots;
             }
 
-            switch (buttonLabel)
-            {
-                case "Bonus Science":
-                    scienceLabView.DrawGUIControls();
-                    break;
-
-                //Let the manifest admin draw the GUI.
-                case "Experiment Lab":
-                default:
-                    manifestAdmin.DrawGUIControls();
-                    break;
-            }
+            manifestAdmin.DrawGUIControls();
         }
 
         public List<string> GetButtonLabels()
         {
             List<string> buttonLabels = new List<string>();
-            buttonLabels.Add("Experiment Lab");
-            buttonLabels.Add("Bonus Science");
+            buttonLabels.Add(opsButtonName);
             return buttonLabels;
         }
 
@@ -408,15 +489,12 @@ namespace WildBlueIndustries
         #region IPartMassModifier
         public float GetModuleMass(float defaultMass, ModifierStagingSituation sit)
         {
-            float moduleMass = defaultMass;
+            float moduleMass = 0;
             int index;
             WBIModuleScienceExperiment experimentSlot;
 
             if (experimentSlots == null)
-                return defaultMass;
-
-            if (switcher != null)
-                moduleMass = switcher.CalculatePartMass(defaultMass, switcher.partMass);
+                return 0;
 
             for (index = 0; index < experimentSlots.Length; index++)
             {

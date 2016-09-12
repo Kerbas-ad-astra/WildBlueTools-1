@@ -28,7 +28,7 @@ namespace WildBlueIndustries
         private static string EMISSIVE_TEXTURE = "_Emissive";
 
         [KSPField(isPersistant = true)]
-        public int currentVolume;
+        public float currentVolume;
 
         //Name of the template nodes.
         [KSPField(isPersistant = true)]
@@ -36,10 +36,10 @@ namespace WildBlueIndustries
 
         //Base amount of volume the part stores, if any.
         [KSPField(isPersistant = true)]
-        public int baseStorage;
+        public float baseStorage;
 
         [KSPField(isPersistant = true)]
-        public int maxStorage;
+        public float maxStorage;
 
         [KSPField(isPersistant = true)]
         public bool decalsVisible;
@@ -106,7 +106,7 @@ namespace WildBlueIndustries
 
         #region User Events & API
         [KSPEvent(guiActive = true, guiActiveEditor = false, guiName = "Dump Resources", guiActiveUnfocused = true, unfocusedRange = 3.0f)]
-        public void DumpResources()
+        public virtual void DumpResources()
         {
             if (HighLogic.LoadedSceneIsFlight)
             {
@@ -121,10 +121,19 @@ namespace WildBlueIndustries
             }
 
             foreach (PartResource resource in this.part.Resources)
-                resource.amount = 0;
+            {
+                if (resource.resourceName != "ElectricCharge")
+                    resource.amount = 0;
+            }
 
             if (onResourcesDumped != null)
                 onResourcesDumped();
+        }
+
+        [KSPAction("Dump Resources")]
+        public void DumpResourcesAction(KSPActionParam param)
+        {
+            DumpResources();
         }
 
         [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Toggle Decals")]
@@ -254,14 +263,10 @@ namespace WildBlueIndustries
         {
             WBIResourceSwitcher resourceSwitcher;
 
-            //Finally, load resources for symmetrical parts
-            if (HighLogic.LoadedSceneIsEditor)
+            foreach (Part symmetryPart in this.part.symmetryCounterparts)
             {
-                foreach (Part symmetryPart in this.part.symmetryCounterparts)
-                {
-                    resourceSwitcher = symmetryPart.GetComponent<WBIResourceSwitcher>();
-                    resourceSwitcher.UpdateContentsAndGui(templateIndex);
-                }
+                resourceSwitcher = symmetryPart.GetComponent<WBIResourceSwitcher>();
+                resourceSwitcher.UpdateContentsAndGui(templateIndex);
             }
 
             //Dirty the GUI
@@ -1281,7 +1286,7 @@ namespace WildBlueIndustries
             return true;
         }
 
-        protected virtual bool canAffordReconfigure(string templateName)
+        protected virtual bool canAffordReconfigure(string templateName, bool deflatedModulesAutoPass = true)
         {
             return true;
         }        
@@ -1295,7 +1300,7 @@ namespace WildBlueIndustries
             else if (partMass > 0.001f && isInflatable && isDeployed)
                 return partMass;
             else
-                return defaultMass;
+                return 0;
         }
 
         public float GetModuleMass(float defaultMass, ModifierStagingSituation sit)

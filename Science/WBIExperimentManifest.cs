@@ -86,7 +86,10 @@ namespace WildBlueIndustries
         public WBIModuleScienceExperiment[] GetExperimentSlots()
         {
             if (experimentSlots != null)
-                return experimentSlots;
+            {
+                if (experimentSlots.Length > 0)
+                    return experimentSlots;
+            }
             WBIModuleScienceExperiment experiment;
             List<WBIModuleScienceExperiment> experiments = this.part.FindModulesImplementing<WBIModuleScienceExperiment>();
             int totalCount;
@@ -204,11 +207,11 @@ namespace WildBlueIndustries
         #region IPartMassModifier
         public float GetModuleMass(float defaultMass, ModifierStagingSituation sit)
         {
-            float moduleMass = defaultMass;
+            float moduleMass = 0;
             WBIModuleScienceExperiment experimentSlot;
 
             if (experimentSlots == null)
-                return defaultMass;
+                return 0;
 
             for (int index = 0; index < experimentSlots.Length; index++)
             {

@@ -23,6 +23,32 @@ namespace WildBlueIndustries
     {
         public const float CelsiusToKelvin = 272.15f;
         public const float StefanBoltzmann = 5.67e-8f;
+        public const double secondsPerMinute = 60;
+        public const double secondsPerHour = 3600;
+        public const double secondsPerDayKerbin = 21600;
+        public const double secondsPerDayEarth = 86400;
+
+        public static string formatTime(double timeSeconds)
+        {
+            string timeString;
+            double seconds = Math.Abs(timeSeconds);
+            double secondsPerDay = GameSettings.KERBIN_TIME ? secondsPerDayKerbin : secondsPerDayEarth;
+
+            double days = Math.Floor(seconds / secondsPerDay);
+            seconds -= days * secondsPerDay;
+
+            double hours = Math.Floor(seconds / secondsPerHour);
+            seconds -= hours * secondsPerHour;
+
+            double minutes = Math.Floor(seconds / secondsPerMinute);
+            seconds -= minutes * secondsPerMinute;
+
+            timeString = string.Format("{0:f0}d {1:f0}h {2:f0}m {3:f2}s", days, hours, minutes, seconds);
+            if (timeSeconds < 0f)
+                timeString = "-" + timeString;
+
+            return timeString;
+        }
 
         public static bool IsBiomeUnlocked(Vessel vessel)
         {
@@ -117,6 +143,27 @@ namespace WildBlueIndustries
 
         public static bool IsModInstalled(string neededMod)
         {
+            //Now check for the required mod
+            string modToCheck = neededMod;
+            bool checkInverse = false;
+            if (neededMod.StartsWith("!"))
+            {
+                checkInverse = true;
+                modToCheck = neededMod.Substring(1, neededMod.Length - 1);
+            }
+
+            bool isInstalled = AssemblyLoader.loadedAssemblies.Any(a => a.name == modToCheck);
+
+            if (isInstalled && checkInverse == false)
+                return true;
+            else if (isInstalled && checkInverse)
+                return true;
+            else if (!isInstalled && checkInverse)
+                return false;
+            else
+                return false;
+
+/*
             string modToCheck = null;
             bool checkInverse = false;
             bool modFound = false;
@@ -158,6 +205,7 @@ namespace WildBlueIndustries
                 return false;
             else
                 return false;
+ */
         }
 
         #region refresh tweakable GUI

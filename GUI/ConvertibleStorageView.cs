@@ -32,6 +32,8 @@ namespace WildBlueIndustries
         public int templateCount = -1;
         public string requiredSkill = string.Empty;
         public TemplateManager templateManager;
+        public Part part;
+        public bool updateSymmetry = true;
 
         public PreviewTemplate previewTemplate;
         public SetTemplate setTemplate;
@@ -116,6 +118,11 @@ namespace WildBlueIndustries
             }
             GUILayout.EndScrollView();
 
+            //Update symmetry
+            if (HighLogic.LoadedSceneIsFlight && this.part.symmetryCounterparts.Count > 0)
+                updateSymmetry = GUILayout.Toggle(updateSymmetry, "Update symmetry parts");
+
+            //Reconfigure button
             if (GUILayout.Button("Reconfigure") && setTemplate != null)
             {
                 ConfigNode node = templateManager[templateName];
